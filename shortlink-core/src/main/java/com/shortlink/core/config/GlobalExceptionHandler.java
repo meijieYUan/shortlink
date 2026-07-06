@@ -18,7 +18,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BizException.class)
     @ResponseStatus(HttpStatus.OK)
     public Result<Void> handleBizException(BizException e, HttpServletRequest request) {
-        log.warn("???? [{}] {} -> code={}, msg={}",
+        log.warn("业务异常 [{}] {} -> code={}, msg={}",
             request.getMethod(), request.getRequestURI(), e.getCode(), e.getMessage());
         return Result.fail(e.getCode(), e.getMessage());
     }
@@ -26,21 +26,21 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MissingServletRequestParameterException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public Result<Void> handleMissingParam(MissingServletRequestParameterException e, HttpServletRequest request) {
-        log.warn("???? [{}] {} -> {}", request.getMethod(), request.getRequestURI(), e.getMessage());
-        return Result.fail(ResultCode.BAD_REQUEST, "??????: " + e.getParameterName());
+        log.warn("参数缺失 [{}] {} -> {}", request.getMethod(), request.getRequestURI(), e.getMessage());
+        return Result.fail(ResultCode.BAD_REQUEST, "缺少必要参数: " + e.getParameterName());
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public Result<Void> handleIllegalArgument(IllegalArgumentException e, HttpServletRequest request) {
-        log.warn("???? [{}] {} -> {}", request.getMethod(), request.getRequestURI(), e.getMessage());
+        log.warn("参数非法 [{}] {} -> {}", request.getMethod(), request.getRequestURI(), e.getMessage());
         return Result.fail(ResultCode.BAD_REQUEST, e.getMessage());
     }
 
     @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public Result<Void> handleException(Exception e, HttpServletRequest request) {
-        log.error("???? [{}] {}", request.getMethod(), request.getRequestURI(), e);
+        log.error("系统异常 [{}] {}", request.getMethod(), request.getRequestURI(), e);
         return Result.fail(ResultCode.INTERNAL_ERROR);
     }
 }
