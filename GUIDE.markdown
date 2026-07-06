@@ -13,7 +13,7 @@
 | 网络层 | Undertow（替代 Tomcat，吞吐更高） |
 | 持久层 | MyBatis-Plus + MySQL 8.0 + ShardingSphere（分库分表） |
 | 缓存层 | Redis 7.x（Cluster）+ Caffeine（本地缓存） |
-| 消息队列 | Apache Kafka / RocketMQ（访问日志异步写入） |
+| 消息队列 | Apache RocketMQ 5.x（访问日志异步写入） |
 | 搜索引擎 | Elasticsearch（访问统计检索） |
 | 可观测性 | Micrometer + Prometheus + Grafana + SkyWalking |
 | 压测 | JMeter + wrk + async-profiler |
@@ -171,13 +171,13 @@
   - RingBuffer 大小 16384，多生产者单消费者模式
   - 事件结构：`{shortCode, ip, userAgent, referer, timestamp, country, city}`
 - [ ] **批量写入层**
-  - 消费者每 200ms 或累积 500 条批量写入 Kafka
-  - Kafka Topic 设计：`shortlink-access-log`，分区数 8
+  - 消费者每 200ms 或累积 500 条批量写入 RocketMQ
+  - RocketMQ Topic 设计：`shortlink-access-log`，分区数 8
 - [ ] **存储层**
   - 原始日志：Elasticsearch（保留 30 天，按天创建索引）
   - 聚合统计：MySQL `t_access_stats`（小时级别聚合，TTL 自动清理）
 - [ ] **聚合策略**
-  - Flink / 自研轻量聚合器消费 Kafka
+  - RocketMQ 消费者 + 自研轻量聚合器
   - 按 `(shortCode, hour)` 维度聚合 PV/UV/IP 分布
   - 使用 Redis HyperLogLog 近似去重统计 UV
 - [ ] **IP 地理位置解析**
@@ -383,7 +383,7 @@ shortlink/
 ├── shortlink-analytics/
 │   └── src/main/java/com/shortlink/analytics/
 │       ├── event/                     # 访问事件模型 + Disruptor
-│       ├── kafka/
+│       
 │       ├── repository/                # ES 操作
 │       └── aggregate/                 # 离线聚合
 ├── shortlink-admin/

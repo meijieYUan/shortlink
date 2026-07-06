@@ -1,6 +1,9 @@
 # Gradle
 .gradle/
 build/
+# Maven
+target/
+!.mvn/wrapper/maven-wrapper.jar
 !gradle/wrapper/gradle-wrapper.jar
 !gradle/wrapper/gradle-wrapper.properties
 
