@@ -75,12 +75,12 @@
   ```
 
 - [ ] **URL 哈希索引优化（idempotency dedup）**
-  - 新增 url_hash 列：对归一化后的 original_url 计算 **SHA-256**，取前 64 bits 得到 16 位定长 hex 字符串
-  - 建立 UNIQUE INDEX idx_url_hash，查重从 original_url 全表扫描变为 B+Tree O(1) 精确查找
+  - 对归一化后的 original_url 计算 **MD5**（128-bit，32 hex），比 SHA-256 快 2-3 倍，去重场景无需密码学强度
+  - 建立**普通 INDEX**（非 UNIQUE），允许同一哈希值存在多条记录
   - ThreadLocal MessageDigest 复用，避免高频创建开销
-  - 命中后**二次精确比较** original_url，防止哈希碰撞（10^8 条记录碰撞概率约 2.9*10^-4）
-
-- [ ] 实现 Base62 编解码工具类（`short_code` ↔ `id` 双向转换）
+  - 查重流程：MD5 哈希 - 普通索引 O(1) 查找 - 逐行比对 original_url
+    - URL 相同：幂等返回已有短码
+    - URL 不同：哈希碰撞，正常创建新短码（概率极低）
 - [ ] 发号器 V1——基于数据库自增 ID 的简单实现
 - [ ] 短链生成接口 `POST /api/v1/shorten`：
   - 入参：`originalUrl`、`expireTime`（可选）

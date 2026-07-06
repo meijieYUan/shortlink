@@ -17,6 +17,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDateTime;
+import java.util.Collections;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -45,12 +47,13 @@ class ShortLinkServiceTest {
     class Shorten {
 
         @Test
-        @DisplayName("should create a new short link with urlHash")
+        @DisplayName("should create a new short link with MD5 urlHash")
         void createNew() {
             ShortenRequest req = new ShortenRequest();
             req.setOriginalUrl("https://example.com/path");
 
-            when(shortLinkMapper.selectOne(any())).thenReturn(null);
+            // No hash match -> create new
+            when(shortLinkMapper.selectList(any())).thenReturn(Collections.emptyList());
             when(shortLinkMapper.insert(any(ShortLink.class))).thenAnswer(inv -> {
                 ShortLink e = inv.getArgument(0);
                 e.setId(100L);
@@ -63,31 +66,58 @@ class ShortLinkServiceTest {
             assertThat(resp.getShortCode()).isEqualTo("000001c");
             assertThat(resp.getShortUrl()).isEqualTo("http://short.link/000001c");
 
-            // Verify urlHash was set on the inserted entity
+            // Verify urlHash (MD5, 32 chars) was set
             ArgumentCaptor<ShortLink> insertCaptor = ArgumentCaptor.forClass(ShortLink.class);
             verify(shortLinkMapper).insert(insertCaptor.capture());
             ShortLink inserted = insertCaptor.getValue();
             assertThat(inserted.getUrlHash()).isNotEmpty();
-            assertThat(inserted.getUrlHash()).hasSize(16);
+            assertThat(inserted.getUrlHash()).hasSize(32);
         }
 
         @Test
-        @DisplayName("should return existing short link via urlHash (idempotency)")
+        @DisplayName("should return existing via hash match + URL compare (idempotency)")
         void idempotency() {
             ShortenRequest req = new ShortenRequest();
             req.setOriginalUrl("https://example.com");
 
-            // UrlValidator.normalize("https://example.com") -> "https://example.com/"
+            // UrlValidator.normalize -> "https://example.com/"
             ShortLink existing = ShortLink.builder()
                 .id(42L).shortCode("00000G0").originalUrl("https://example.com/")
-                .urlHash("abc123def4567890")
+                .urlHash("d41d8cd98f00b204e9800998ecf8427e")
                 .expireTime(LocalDateTime.now().plusDays(30)).status(1).build();
-            when(shortLinkMapper.selectOne(any())).thenReturn(existing);
+
+            when(shortLinkMapper.selectList(any())).thenReturn(List.of(existing));
 
             ShortenResponse resp = shortLinkService.shorten(req);
 
             assertThat(resp.getShortCode()).isEqualTo("00000G0");
             assertThat(resp.getId()).isEqualTo(42L);
+        }
+
+        @Test
+        @DisplayName("should create new on hash collision (same hash, different URL)")
+        void hashCollision() {
+            ShortenRequest req = new ShortenRequest();
+            req.setOriginalUrl("https://example.com/new");
+
+            // Existing record with same hash but different original URL
+            ShortLink colliding = ShortLink.builder()
+                .id(1L).shortCode("0000001").originalUrl("https://example.com/old")
+                .urlHash("samehashfordifferenturls")
+                .expireTime(LocalDateTime.now().plusDays(30)).status(1).build();
+
+            when(shortLinkMapper.selectList(any())).thenReturn(List.of(colliding));
+            when(shortLinkMapper.insert(any(ShortLink.class))).thenAnswer(inv -> {
+                ShortLink e = inv.getArgument(0);
+                e.setId(200L);
+                return 1;
+            });
+            doReturn(1).when(shortLinkMapper).updateById(any(ShortLink.class));
+
+            ShortenResponse resp = shortLinkService.shorten(req);
+
+            // Should create new record despite hash collision
+            assertThat(resp.getId()).isEqualTo(200L);
         }
 
         @Test

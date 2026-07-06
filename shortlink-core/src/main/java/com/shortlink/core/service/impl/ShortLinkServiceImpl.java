@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Slf4j
 @Service
@@ -39,26 +40,31 @@ public class ShortLinkServiceImpl implements ShortLinkService {
             throw new BizException(ResultCode.URL_INVALID);
         }
 
-        // 2. Compute URL hash for O(1) idempotency dedup
-        String urlHash = HashUtil.sha256Hex16(normalizedUrl);
+        // 2. Compute MD5 hash for O(1) index lookup
+        String urlHash = HashUtil.md5Hex(normalizedUrl);
 
-        // 3. Check existing via unique hash index (O(1))
-        ShortLink existing = shortLinkMapper.selectOne(
+        // 3. Query by hash (normal index, may return 0-N rows)
+        //    Iterate results: same URL -> idempotent return; different URL -> hash collision, proceed
+        List<ShortLink> candidates = shortLinkMapper.selectList(
             new LambdaQueryWrapper<ShortLink>()
                 .eq(ShortLink::getUrlHash, urlHash)
                 .eq(ShortLink::getStatus, 1)
                 .and(w -> w.isNull(ShortLink::getExpireTime)
                            .or().gt(ShortLink::getExpireTime, LocalDateTime.now()))
-                .last("LIMIT 1")
         );
 
-        // Secondary compare original URL to guard against hash collision (extremely rare)
-        if (existing != null && normalizedUrl.equals(existing.getOriginalUrl())) {
-            log.info("Idempotent hit: existing shortCode={} for URL={}", existing.getShortCode(), normalizedUrl);
-            return buildResponse(existing);
+        for (ShortLink candidate : candidates) {
+            if (normalizedUrl.equals(candidate.getOriginalUrl())) {
+                log.info("Idempotent hit: shortCode={}", candidate.getShortCode());
+                return buildResponse(candidate);
+            }
+            // Hash collision: same hash, different URL — log and continue creating new record
+            log.warn("MD5 hash collision detected: urlHash={}, existingId={}, newUrl={}",
+                     urlHash, candidate.getId(), normalizedUrl);
         }
 
         // 4. Insert new record
+        //    Currently uses DB auto-increment ID; Phase 4 will replace with Snowflake
         LocalDateTime expireTime = request.getExpireTime();
         if (expireTime == null) {
             expireTime = LocalDateTime.now().plusDays(Constants.DEFAULT_EXPIRE_DAYS);
@@ -78,7 +84,7 @@ public class ShortLinkServiceImpl implements ShortLinkService {
             throw new BizException(ResultCode.GENERATE_FAILED);
         }
 
-        // 5. Generate short code from auto-increment ID
+        // 5. Generate short code from auto-increment ID, then update
         String shortCode = Base62Util.encode(entity.getId());
         entity.setShortCode(shortCode);
         shortLinkMapper.updateById(entity);
