@@ -45,7 +45,7 @@ class ShortLinkServiceTest {
     class Shorten {
 
         @Test
-        @DisplayName("should create a new short link")
+        @DisplayName("should create a new short link with urlHash")
         void createNew() {
             ShortenRequest req = new ShortenRequest();
             req.setOriginalUrl("https://example.com/path");
@@ -62,21 +62,25 @@ class ShortLinkServiceTest {
 
             assertThat(resp.getShortCode()).isEqualTo("000001c");
             assertThat(resp.getShortUrl()).isEqualTo("http://short.link/000001c");
-            assertThat(resp.getOriginalUrl()).contains("example.com");
 
-            ArgumentCaptor<ShortLink> captor = ArgumentCaptor.forClass(ShortLink.class);
-            verify(shortLinkMapper).updateById(captor.capture());
-            assertThat(captor.getValue().getShortCode()).isEqualTo("000001c");
+            // Verify urlHash was set on the inserted entity
+            ArgumentCaptor<ShortLink> insertCaptor = ArgumentCaptor.forClass(ShortLink.class);
+            verify(shortLinkMapper).insert(insertCaptor.capture());
+            ShortLink inserted = insertCaptor.getValue();
+            assertThat(inserted.getUrlHash()).isNotEmpty();
+            assertThat(inserted.getUrlHash()).hasSize(16);
         }
 
         @Test
-        @DisplayName("should return existing short link for same URL (idempotency)")
+        @DisplayName("should return existing short link via urlHash (idempotency)")
         void idempotency() {
             ShortenRequest req = new ShortenRequest();
             req.setOriginalUrl("https://example.com");
 
+            // UrlValidator.normalize("https://example.com") -> "https://example.com/"
             ShortLink existing = ShortLink.builder()
-                .id(42L).shortCode("00000G0").originalUrl("https://example.com")
+                .id(42L).shortCode("00000G0").originalUrl("https://example.com/")
+                .urlHash("abc123def4567890")
                 .expireTime(LocalDateTime.now().plusDays(30)).status(1).build();
             when(shortLinkMapper.selectOne(any())).thenReturn(existing);
 

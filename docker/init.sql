@@ -6,12 +6,14 @@ CREATE TABLE IF NOT EXISTS t_short_link (
     id            BIGINT PRIMARY KEY AUTO_INCREMENT,
     short_code    VARCHAR(8)    NOT NULL UNIQUE COMMENT '短码',
     original_url  TEXT          NOT NULL COMMENT '原始链接',
+    url_hash      VARCHAR(32)   NOT NULL COMMENT 'URL哈希(幂等查重用)',
     expire_time   DATETIME      DEFAULT NULL COMMENT '过期时间',
     status        TINYINT       DEFAULT 1 COMMENT '1:有效 0:失效',
     creator       VARCHAR(64)   DEFAULT '' COMMENT '创建者',
     create_time   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_time   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_short_code (short_code),
+    UNIQUE INDEX idx_url_hash (url_hash),
     INDEX idx_status_expire (status, expire_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='短链接映射表';
 

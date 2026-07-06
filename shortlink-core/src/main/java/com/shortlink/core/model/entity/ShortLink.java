@@ -26,6 +26,9 @@ public class ShortLink {
     /** Original long URL */
     private String originalUrl;
 
+    /** URL hash (SHA-256 first 64 bits) for idempotency dedup */
+    private String urlHash;
+
     /** Expiration time; null means never expires */
     private LocalDateTime expireTime;
 

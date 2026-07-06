@@ -5,6 +5,7 @@ import com.shortlink.common.constant.Constants;
 import com.shortlink.common.exception.BizException;
 import com.shortlink.common.result.ResultCode;
 import com.shortlink.common.util.Base62Util;
+import com.shortlink.common.util.HashUtil;
 import com.shortlink.common.util.UrlValidator;
 import com.shortlink.core.model.dto.ShortenRequest;
 import com.shortlink.core.model.dto.ShortenResponse;
@@ -32,36 +33,41 @@ public class ShortLinkServiceImpl implements ShortLinkService {
     @Override
     @Transactional
     public ShortenResponse shorten(ShortenRequest request) {
-        // 1. Validate URL
+        // 1. Validate and normalize URL
         String normalizedUrl = UrlValidator.normalize(request.getOriginalUrl());
         if (!UrlValidator.isValid(normalizedUrl)) {
             throw new BizException(ResultCode.URL_INVALID);
         }
 
-        // 2. Idempotency: check if same URL already exists
+        // 2. Compute URL hash for O(1) idempotency dedup
+        String urlHash = HashUtil.sha256Hex16(normalizedUrl);
+
+        // 3. Check existing via unique hash index (O(1))
         ShortLink existing = shortLinkMapper.selectOne(
             new LambdaQueryWrapper<ShortLink>()
-                .eq(ShortLink::getOriginalUrl, normalizedUrl)
+                .eq(ShortLink::getUrlHash, urlHash)
                 .eq(ShortLink::getStatus, 1)
                 .and(w -> w.isNull(ShortLink::getExpireTime)
                            .or().gt(ShortLink::getExpireTime, LocalDateTime.now()))
-                .orderByDesc(ShortLink::getId)
                 .last("LIMIT 1")
         );
-        if (existing != null) {
+
+        // Secondary compare original URL to guard against hash collision (extremely rare)
+        if (existing != null && normalizedUrl.equals(existing.getOriginalUrl())) {
             log.info("Idempotent hit: existing shortCode={} for URL={}", existing.getShortCode(), normalizedUrl);
             return buildResponse(existing);
         }
 
-        // 3. Insert new record
+        // 4. Insert new record
         LocalDateTime expireTime = request.getExpireTime();
         if (expireTime == null) {
             expireTime = LocalDateTime.now().plusDays(Constants.DEFAULT_EXPIRE_DAYS);
         }
 
         ShortLink entity = ShortLink.builder()
-            .shortCode("") // placeholder, updated after insert
+            .shortCode("")
             .originalUrl(normalizedUrl)
+            .urlHash(urlHash)
             .expireTime(expireTime)
             .status(1)
             .creator("")
@@ -72,12 +78,12 @@ public class ShortLinkServiceImpl implements ShortLinkService {
             throw new BizException(ResultCode.GENERATE_FAILED);
         }
 
-        // 4. Generate short code from auto-increment ID
+        // 5. Generate short code from auto-increment ID
         String shortCode = Base62Util.encode(entity.getId());
         entity.setShortCode(shortCode);
         shortLinkMapper.updateById(entity);
 
-        log.info("Short link created: id={}, shortCode={}, url={}", entity.getId(), shortCode, normalizedUrl);
+        log.info("Short link created: id={}, shortCode={}, urlHash={}", entity.getId(), shortCode, urlHash);
         return buildResponse(entity);
     }
 
@@ -85,10 +91,9 @@ public class ShortLinkServiceImpl implements ShortLinkService {
     public String getOriginalUrl(String shortCode) {
         long id = Base62Util.decode(shortCode);
         ShortLink entity = shortLinkMapper.selectById(id);
-        if (entity == null  || entity.getStatus() == 0) {
+        if (entity == null || entity.getStatus() == 0) {
             return null;
         }
-        // Check expiration
         if (entity.getExpireTime() != null && entity.getExpireTime().isBefore(LocalDateTime.now())) {
             return null;
         }
@@ -101,7 +106,7 @@ public class ShortLinkServiceImpl implements ShortLinkService {
             long id = Base62Util.decode(shortCode);
             ShortLink entity = shortLinkMapper.selectById(id);
             if (entity == null || entity.getStatus() == 0) {
-                return false; // not expired, just not found
+                return false;
             }
             return entity.getExpireTime() != null && entity.getExpireTime().isBefore(LocalDateTime.now());
         } catch (Exception e) {
