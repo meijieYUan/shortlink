@@ -1,4 +1,4 @@
-﻿# ShortLink — 高性能短链接系统
+# ShortLink — 高性能短链接系统
 
 > 一个看起来简单、往下挖全是坑的高并发项目。  
 > 目标：单机支撑 10w+ QPS 读、毫秒级跳转、支撑亿级短链存储。
@@ -73,6 +73,13 @@
   );
   CREATE INDEX idx_short_code ON t_short_link(short_code);
   ```
+
+- [ ] **URL 哈希索引优化（idempotency dedup）**
+  - 新增 url_hash 列：对归一化后的 original_url 计算 **SHA-256**，取前 64 bits 得到 16 位定长 hex 字符串
+  - 建立 UNIQUE INDEX idx_url_hash，查重从 original_url 全表扫描变为 B+Tree O(1) 精确查找
+  - ThreadLocal MessageDigest 复用，避免高频创建开销
+  - 命中后**二次精确比较** original_url，防止哈希碰撞（10^8 条记录碰撞概率约 2.9*10^-4）
+
 - [ ] 实现 Base62 编解码工具类（`short_code` ↔ `id` 双向转换）
 - [ ] 发号器 V1——基于数据库自增 ID 的简单实现
 - [ ] 短链生成接口 `POST /api/v1/shorten`：
