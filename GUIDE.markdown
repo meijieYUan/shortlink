@@ -40,9 +40,9 @@
   - `shortlink-analytics` — 统计分析模块
   - `shortlink-admin` — 管理后台 API
   - `shortlink-openapi` — 对外开放 API
-- [ ] 引入核心依赖：Spring Boot Web、MyBatis-Plus、Redis、Kafka、Lombok、Hutool
+- [ ] 引入核心依赖：Spring Boot Web、MyBatis-Plus、Redis、Lombok、Hutool
 - [ ] 配置 Undertow 作为 Web 容器，禁用 Tomcat
-- [ ] Docker Compose 编排开发中间件：MySQL、Redis、Kafka、Elasticsearch
+- [ ] Docker Compose 编排开发中间件：MySQL、Redis、RocketMQ、Elasticsearch
 - [ ] 统一响应体、全局异常处理、请求日志拦截器
 - [ ] 集成 Micrometer + Prometheus 指标导出端点
 - [ ] Git 初始化 + `.gitignore` + 编码规范（Checkstyle）
@@ -307,7 +307,7 @@
   - 基础镜像：`eclipse-temurin:17-jre-alpine`
   - 镜像瘦身：排除无用依赖，最终镜像 ≤ 200MB
 - [ ] **Docker Compose 全链路编排**
-  - 一命令启动：MySQL + Redis + Kafka + ES + shortlink-app
+  - 一命令启动：MySQL + Redis + RocketMQ + ES + shortlink-app
   - 健康检查（`depends_on` + `healthcheck`）
 - [ ] **K8s 部署文件（可选）**
   - Deployment + Service + ConfigMap
@@ -427,7 +427,7 @@ shortlink/
 缓存设计：    多级缓存、布隆过滤器、穿透/击穿/雪崩防护
 分布式：      号段发号器、分布式锁、Redis Cluster
 并发编程：    Disruptor RingBuffer、线程池隔离、异步非阻塞
-消息队列：    Kafka 生产消费、批量写入优化
+消息队列：    RocketMQ 生产消费、批量写入优化
 可观测性：    Micrometer + Prometheus + Grafana + 火焰图
 性能工程：    JMeter/wrk 压测、JVM GC 调优、系统参数调优
 工程化：      Gradle 多模块、Docker 多阶段构建、CI/CD
