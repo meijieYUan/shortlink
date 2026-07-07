@@ -36,6 +36,8 @@
         <hutool.version>5.8.34</hutool.version>
         <mybatis-plus.version>3.5.9</mybatis-plus.version>
         <rocketmq.version>2.3.3</rocketmq.version>
+        <caffeine.version>3.1.8</caffeine.version>
+        <redisson.version>3.36.0</redisson.version>
     </properties>
 
     <repositories>
@@ -62,7 +64,6 @@
 
     <dependencyManagement>
         <dependencies>
-            <!-- Internal modules -->
             <dependency>
                 <groupId>com.shortlink</groupId>
                 <artifactId>shortlink-common</artifactId>
@@ -93,13 +94,11 @@
                 <artifactId>shortlink-sdk</artifactId>
                 <version>${project.version}</version>
             </dependency>
-            <!-- RocketMQ -->
             <dependency>
                 <groupId>org.apache.rocketmq</groupId>
                 <artifactId>rocketmq-spring-boot-starter</artifactId>
                 <version>${rocketmq.version}</version>
             </dependency>
-            <!-- Third-party -->
             <dependency>
                 <groupId>cn.hutool</groupId>
                 <artifactId>hutool-all</artifactId>
@@ -109,6 +108,16 @@
                 <groupId>com.baomidou</groupId>
                 <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
                 <version>${mybatis-plus.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.ben-manes.caffeine</groupId>
+                <artifactId>caffeine</artifactId>
+                <version>${caffeine.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.redisson</groupId>
+                <artifactId>redisson-spring-boot-starter</artifactId>
+                <version>${redisson.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
