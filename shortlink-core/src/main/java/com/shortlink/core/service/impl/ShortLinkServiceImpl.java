@@ -9,6 +9,7 @@ import com.shortlink.common.result.ResultCode;
 import com.shortlink.common.util.Base62Util;
 import com.shortlink.common.util.HashUtil;
 import com.shortlink.common.util.UrlValidator;
+import com.shortlink.core.idgen.IdGenerator;
 import com.shortlink.core.model.dto.ShortenRequest;
 import com.shortlink.core.model.dto.ShortenResponse;
 import com.shortlink.core.model.entity.ShortLink;
@@ -31,6 +32,7 @@ public class ShortLinkServiceImpl implements ShortLinkService {
 
     private final ShortLinkMapper shortLinkMapper;
     private final ShortLinkCacheService cacheService;
+    private final IdGenerator idGenerator;
 
     @Value("${shortlink.base-url:http://localhost:8080}")
     private String baseUrl;
@@ -43,9 +45,8 @@ public class ShortLinkServiceImpl implements ShortLinkService {
             throw new BizException(ResultCode.URL_INVALID);
         }
 
+        // Idempotency check via MD5 hash
         String urlHash = HashUtil.md5Hex(normalizedUrl);
-
-        // Idempotency check via hash index
         List<ShortLink> candidates = shortLinkMapper.selectList(
             new LambdaQueryWrapper<ShortLink>()
                 .eq(ShortLink::getUrlHash, urlHash)
@@ -53,23 +54,26 @@ public class ShortLinkServiceImpl implements ShortLinkService {
                 .and(w -> w.isNull(ShortLink::getExpireTime)
                            .or().gt(ShortLink::getExpireTime, LocalDateTime.now()))
         );
-
         for (ShortLink candidate : candidates) {
             if (normalizedUrl.equals(candidate.getOriginalUrl())) {
                 log.info("Idempotent hit: shortCode={}", candidate.getShortCode());
                 return buildResponse(candidate);
             }
-            log.warn("MD5 hash collision: urlHash={}, existingId={}", urlHash, candidate.getId());
         }
 
-        // Create new record
+        // Generate ID via segment-based generator (Phase 4)
+        long id = idGenerator.nextId();
+        String shortCode = Base62Util.encode(id);
+
         LocalDateTime expireTime = request.getExpireTime();
         if (expireTime == null) {
             expireTime = LocalDateTime.now().plusDays(Constants.DEFAULT_EXPIRE_DAYS);
         }
 
+        // Single INSERT: all fields known upfront (no more INSERT + UPDATE)
         ShortLink entity = ShortLink.builder()
-            .shortCode("")
+            .id(id)
+            .shortCode(shortCode)
             .originalUrl(normalizedUrl)
             .urlHash(urlHash)
             .expireTime(expireTime)
@@ -82,32 +86,22 @@ public class ShortLinkServiceImpl implements ShortLinkService {
             throw new BizException(ResultCode.GENERATE_FAILED);
         }
 
-        String shortCode = Base62Util.encode(entity.getId());
-        entity.setShortCode(shortCode);
-        shortLinkMapper.updateById(entity);
-
-        // Populate cache eagerly
         cacheService.onCreated(shortCode, toCacheInfo(entity));
 
-        log.info("Short link created: id={}, shortCode={}, urlHash={}", entity.getId(), shortCode, urlHash);
+        log.info("Short link created: id={}, shortCode={}", id, shortCode);
         return buildResponse(entity);
     }
 
     @Override
     public String getOriginalUrl(String shortCode) {
-        // Use multi-level cache with DB fallback
         Optional<CacheLinkInfo> result = cacheService.get(shortCode, () -> {
             long id = Base62Util.decode(shortCode);
             ShortLink entity = shortLinkMapper.selectById(id);
-            if (entity == null || entity.getStatus() == 0) {
+            if (entity == null || entity.getStatus() == 0) return Optional.empty();
+            if (entity.getExpireTime() != null && entity.getExpireTime().isBefore(LocalDateTime.now()))
                 return Optional.empty();
-            }
-            if (entity.getExpireTime() != null && entity.getExpireTime().isBefore(LocalDateTime.now())) {
-                return Optional.empty();
-            }
             return Optional.of(toCacheInfo(entity));
         });
-
         return result.map(CacheLinkInfo::getOriginalUrl).orElse(null);
     }
 
@@ -117,24 +111,19 @@ public class ShortLinkServiceImpl implements ShortLinkService {
             try {
                 long id = Base62Util.decode(shortCode);
                 ShortLink entity = shortLinkMapper.selectById(id);
-                if (entity == null || entity.getStatus() == 0) {
-                    return Optional.empty();
-                }
+                if (entity == null || entity.getStatus() == 0) return Optional.empty();
                 return Optional.of(toCacheInfo(entity));
             } catch (Exception e) {
                 return Optional.empty();
             }
         });
-
         return result.map(info -> info.getExpireTime() != null
-            && info.getExpireTime().isBefore(LocalDateTime.now()))
-            .orElse(false);
+            && info.getExpireTime().isBefore(LocalDateTime.now())).orElse(false);
     }
 
     private ShortenResponse buildResponse(ShortLink entity) {
         return ShortenResponse.builder()
-            .id(entity.getId())
-            .shortCode(entity.getShortCode())
+            .id(entity.getId()).shortCode(entity.getShortCode())
             .shortUrl(baseUrl + "/" + entity.getShortCode())
             .originalUrl(entity.getOriginalUrl())
             .expireTime(entity.getExpireTime())
@@ -143,10 +132,8 @@ public class ShortLinkServiceImpl implements ShortLinkService {
 
     private CacheLinkInfo toCacheInfo(ShortLink entity) {
         return CacheLinkInfo.builder()
-            .shortCode(entity.getShortCode())
-            .originalUrl(entity.getOriginalUrl())
-            .expireTime(entity.getExpireTime())
-            .status(entity.getStatus())
+            .shortCode(entity.getShortCode()).originalUrl(entity.getOriginalUrl())
+            .expireTime(entity.getExpireTime()).status(entity.getStatus())
             .build();
     }
 }

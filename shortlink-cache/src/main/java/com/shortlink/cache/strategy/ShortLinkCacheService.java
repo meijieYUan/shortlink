@@ -39,7 +39,8 @@ public class ShortLinkCacheService {
     private final RedissonClient redissonClient;
 
     private static final long LOCK_WAIT_SECONDS = 3;
-    private static final long LOCK_LEASE_SECONDS = 10;
+    //锁的持有时间 -1 开启看门狗机制
+    private static final long LOCK_LEASE_SECONDS = -1;
     private static final String LOCK_PREFIX = "shortlink:lock:";
 
     /**
@@ -101,7 +102,7 @@ public class ShortLinkCacheService {
      * Notify cache that a short link was updated/deleted (Cache Aside: invalidate).
      */
     public void onUpdated(String shortCode) {
-        localCache.invalidate(shortCode);
+        localCache.invalidate(shortCode);   //删除缓存key
         redisCache.delete(shortCode);
     }
 
@@ -124,7 +125,7 @@ public class ShortLinkCacheService {
             // Try to acquire the lock; if held by another thread, retry L2
             if (lock.tryLock(LOCK_WAIT_SECONDS, LOCK_LEASE_SECONDS, TimeUnit.SECONDS)) {
                 try {
-                    // Double-check: another thread might have populated the cache
+                    // Double-check: another thread might have populated（填充） the cache
                     Optional<CacheLinkInfo> recheck = redisCache.get(shortCode);
                     if (recheck.isPresent()) {
                         return recheck;

@@ -3,7 +3,7 @@ CREATE DATABASE IF NOT EXISTS shortlink DEFAULT CHARACTER SET utf8mb4 COLLATE ut
 USE shortlink;
 
 CREATE TABLE IF NOT EXISTS t_short_link (
-    id            BIGINT PRIMARY KEY AUTO_INCREMENT,
+    id            BIGINT PRIMARY KEY COMMENT '由号段发号器分配',
     short_code    VARCHAR(8)    NOT NULL UNIQUE COMMENT '短码',
     original_url  TEXT          NOT NULL COMMENT '原始链接',
     url_hash      VARCHAR(32)   NOT NULL COMMENT 'MD5哈希(幂等查重用)',

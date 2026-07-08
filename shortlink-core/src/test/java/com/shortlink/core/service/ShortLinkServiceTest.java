@@ -2,6 +2,7 @@ package com.shortlink.core.service;
 
 import com.shortlink.cache.model.CacheLinkInfo;
 import com.shortlink.cache.strategy.ShortLinkCacheService;
+import com.shortlink.core.idgen.IdGenerator;
 import com.shortlink.core.model.dto.ShortenRequest;
 import com.shortlink.core.model.dto.ShortenResponse;
 import com.shortlink.core.model.entity.ShortLink;
@@ -27,17 +28,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class ShortLinkServiceTest {
 
-    @Mock
-    private ShortLinkMapper shortLinkMapper;
-    @Mock
-    private ShortLinkCacheService cacheService;
+    @Mock private ShortLinkMapper shortLinkMapper;
+    @Mock private ShortLinkCacheService cacheService;
+    @Mock private IdGenerator idGenerator;
 
     @InjectMocks
     private ShortLinkServiceImpl shortLinkService;
@@ -52,24 +51,28 @@ class ShortLinkServiceTest {
     class Shorten {
 
         @Test
-        @DisplayName("should create a new short link and populate cache")
+        @DisplayName("should create short link with segment-generated ID in single INSERT")
         void createNew() {
             ShortenRequest req = new ShortenRequest();
             req.setOriginalUrl("https://example.com/path");
 
             when(shortLinkMapper.selectList(any())).thenReturn(Collections.emptyList());
-            when(shortLinkMapper.insert(any(ShortLink.class))).thenAnswer(inv -> {
-                ShortLink e = inv.getArgument(0);
-                e.setId(100L);
-                return 1;
-            });
-            doReturn(1).when(shortLinkMapper).updateById(any(ShortLink.class));
+            when(idGenerator.nextId()).thenReturn(100L);
+            when(shortLinkMapper.insert(any(ShortLink.class))).thenReturn(1);
 
             ShortenResponse resp = shortLinkService.shorten(req);
 
             assertThat(resp.getShortCode()).isEqualTo("000001c");
+            assertThat(resp.getId()).isEqualTo(100L);
 
-            // Verify cache was populated
+            // Verify single INSERT (no UPDATE needed)
+            ArgumentCaptor<ShortLink> captor = ArgumentCaptor.forClass(ShortLink.class);
+            verify(shortLinkMapper).insert(captor.capture());
+            ShortLink inserted = captor.getValue();
+            assertThat(inserted.getId()).isEqualTo(100L);
+            assertThat(inserted.getShortCode()).isEqualTo("000001c");
+
+            // Verify cache populated
             verify(cacheService).onCreated(eq("000001c"), any(CacheLinkInfo.class));
         }
 
@@ -87,7 +90,6 @@ class ShortLinkServiceTest {
             when(shortLinkMapper.selectList(any())).thenReturn(List.of(existing));
 
             ShortenResponse resp = shortLinkService.shorten(req);
-
             assertThat(resp.getShortCode()).isEqualTo("00000G0");
         }
 
@@ -96,7 +98,6 @@ class ShortLinkServiceTest {
         void rejectInvalidUrl() {
             ShortenRequest req = new ShortenRequest();
             req.setOriginalUrl("not-a-url");
-
             assertThatThrownBy(() -> shortLinkService.shorten(req))
                 .isInstanceOf(com.shortlink.common.exception.BizException.class);
         }
@@ -112,20 +113,16 @@ class ShortLinkServiceTest {
             CacheLinkInfo info = CacheLinkInfo.builder()
                 .shortCode("0000001").originalUrl("https://example.com")
                 .expireTime(LocalDateTime.now().plusDays(90)).status(1).build();
-
             when(cacheService.get(eq("0000001"), any())).thenReturn(Optional.of(info));
 
-            String url = shortLinkService.getOriginalUrl("0000001");
-            assertThat(url).isEqualTo("https://example.com");
+            assertThat(shortLinkService.getOriginalUrl("0000001")).isEqualTo("https://example.com");
         }
 
         @Test
         @DisplayName("should return null when cache returns empty")
         void cacheEmpty() {
             when(cacheService.get(eq("0000001"), any())).thenReturn(Optional.empty());
-
-            String url = shortLinkService.getOriginalUrl("0000001");
-            assertThat(url).isNull();
+            assertThat(shortLinkService.getOriginalUrl("0000001")).isNull();
         }
     }
 
@@ -134,26 +131,22 @@ class ShortLinkServiceTest {
     class IsExpired {
 
         @Test
-        @DisplayName("should return true when cache info is expired")
+        @DisplayName("should return true when expired")
         void expired() {
             CacheLinkInfo info = CacheLinkInfo.builder()
                 .shortCode("0000001").originalUrl("https://example.com")
                 .expireTime(LocalDateTime.now().minusHours(1)).status(1).build();
-
             when(cacheService.get(eq("0000001"), any())).thenReturn(Optional.of(info));
-
             assertThat(shortLinkService.isExpired("0000001")).isTrue();
         }
 
         @Test
-        @DisplayName("should return false when cache info is active")
+        @DisplayName("should return false when active")
         void active() {
             CacheLinkInfo info = CacheLinkInfo.builder()
                 .shortCode("0000001").originalUrl("https://example.com")
                 .expireTime(LocalDateTime.now().plusDays(30)).status(1).build();
-
             when(cacheService.get(eq("0000001"), any())).thenReturn(Optional.of(info));
-
             assertThat(shortLinkService.isExpired("0000001")).isFalse();
         }
     }

@@ -17,27 +17,19 @@ import java.time.LocalDateTime;
 @TableName("t_short_link")
 public class ShortLink {
 
-    @TableId(type = IdType.AUTO)
+    /** ID provided by IdGenerator (segment mode), not DB auto-increment */
+    @TableId(type = IdType.INPUT)
     private Long id;
 
-    /** Short code, e.g. "aB3x9Kq" */
     private String shortCode;
-
-    /** Original long URL */
     private String originalUrl;
-
-    /** URL hash (SHA-256 first 64 bits) for idempotency dedup */
     private String urlHash;
-
-    /** Expiration time; null means never expires */
     private LocalDateTime expireTime;
 
     /** 1=active, 0=disabled */
     private Integer status;
 
     private String creator;
-
     private LocalDateTime createTime;
-
     private LocalDateTime updateTime;
 }

@@ -24,7 +24,11 @@ public class RedisCacheService {
 
     @Getter
     private final StringRedisTemplate redisTemplate;
+    //Json工具类：序列化和反序列化
+
+
     private final ObjectMapper objectMapper = new ObjectMapper()
+        //在手动给 ObjectMapper 安装一个“插件包”，专门用来解决 Java 8+ 日期时间类
         .registerModule(new JavaTimeModule());
 
     public Optional<CacheLinkInfo> get(String shortCode) {
