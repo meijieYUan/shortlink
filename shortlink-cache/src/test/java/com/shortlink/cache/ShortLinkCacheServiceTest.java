@@ -13,15 +13,14 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.redisson.api.RedissonClient;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -29,14 +28,11 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class ShortLinkCacheServiceTest {
 
-    @Mock
-    private RedisCacheService redisCache;
-    @Mock
-    private BloomFilterService bloomFilter;
-    @Mock
-    private CacheMetrics metrics;
-    @Mock
-    private Cache<String, CacheLinkInfo> localCache;
+    @Mock private RedisCacheService redisCache;
+    @Mock private BloomFilterService bloomFilter;
+    @Mock private CacheMetrics metrics;
+    @Mock private Cache<String, CacheLinkInfo> localCache;
+    @Mock private RedissonClient redissonClient;
 
     private ShortLinkCacheService cacheService;
 
@@ -50,14 +46,15 @@ class ShortLinkCacheServiceTest {
 
     @BeforeEach
     void setUp() {
-        cacheService = new ShortLinkCacheService(localCache, redisCache, bloomFilter, metrics);
+        cacheService = new ShortLinkCacheService(
+            localCache, redisCache, bloomFilter, metrics, redissonClient);
     }
 
     @Nested
     @DisplayName("L1 Caffeine hit")
     class L1Hit {
         @Test
-        @DisplayName("should return from L1 without hitting L2 or DB")
+        @DisplayName("should return from L1 without hitting L2, bloom, or DB")
         void fromL1() {
             when(localCache.getIfPresent(shortCode)).thenReturn(linkInfo);
 
@@ -67,6 +64,7 @@ class ShortLinkCacheServiceTest {
             assertThat(result.get().getOriginalUrl()).isEqualTo("https://example.com");
             verify(metrics).recordL1Hit();
             verify(redisCache, never()).get(anyString());
+            verify(bloomFilter, never()).mightContain(anyString());
         }
     }
 
@@ -84,7 +82,7 @@ class ShortLinkCacheServiceTest {
             assertThat(result).isPresent();
             verify(metrics).recordL1Miss();
             verify(metrics).recordL2Hit();
-            verify(localCache).put(shortCode, linkInfo); // promoted to L1
+            verify(localCache).put(shortCode, linkInfo);
         }
     }
 
@@ -100,13 +98,14 @@ class ShortLinkCacheServiceTest {
 
             @SuppressWarnings("unchecked")
             Supplier<Optional<CacheLinkInfo>> db = org.mockito.Mockito.mock(Supplier.class);
+
             Optional<CacheLinkInfo> result = cacheService.get(shortCode, db);
 
             assertThat(result).isEmpty();
             verify(metrics).recordL1Miss();
             verify(metrics).recordL2Miss();
             verify(metrics).recordBloomReject();
-            verify(db, never()).get(); // DB never called
+            verify(db, never()).get();
         }
     }
 
@@ -138,6 +137,6 @@ class ShortLinkCacheServiceTest {
     }
 
     private Supplier<Optional<CacheLinkInfo>> dbLoader() {
-        return () -> Optional.empty(); // won't be called in these tests
+        return Optional::empty;
     }
 }
