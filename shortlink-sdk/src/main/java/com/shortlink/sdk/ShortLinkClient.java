@@ -77,6 +77,44 @@ public class ShortLinkClient {
         throw new RuntimeException("Shorten failed: HTTP " + response.statusCode() + " " + response.body());
     }
 
+    /**
+     * Look up a short link by its short code.
+     */
+    public ShortenResult lookup(String shortCode) throws Exception {
+        String path = "/openapi/v1/shorten/" + shortCode;
+        String timestamp = String.valueOf(System.currentTimeMillis());
+        String nonce = UUID.randomUUID().toString().replace("-", "");
+
+        String payload = "GET\n" + path + "\n" + timestamp + "\n" + nonce;
+        String signature = HmacUtil.hmacSha256Hex(payload, appSecret);
+
+        HttpRequest request = HttpRequest.newBuilder()
+            .uri(URI.create(baseUrl + path))
+            .timeout(Duration.ofSeconds(10))
+            .header("X-AppKey", appKey)
+            .header("X-Timestamp", timestamp)
+            .header("X-Nonce", nonce)
+            .header("X-Signature", signature)
+            .GET()
+            .build();
+
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+        if (response.statusCode() == 200) {
+            JsonNode root = objectMapper.readTree(response.body());
+            JsonNode data = root.get("data");
+            return new ShortenResult(0, data.get("shortCode").asText(),
+                "", data.get("originalUrl").asText());
+        }
+        if (response.statusCode() == 410) {
+            throw new RuntimeException("Short link expired");
+        }
+        if (response.statusCode() == 404) {
+            throw new RuntimeException("Short link not found");
+        }
+        throw new RuntimeException("Lookup failed: HTTP " + response.statusCode());
+    }
+
     public record ShortenResult(long id, String shortCode, String shortUrl, String originalUrl) {}
 
     public static Builder builder() { return new Builder(); }
