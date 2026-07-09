@@ -1,35 +1,58 @@
 package com.shortlink.openapi.auth;
 
 import jakarta.annotation.PostConstruct;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * In-memory API key store. Maps AppKey to AppSecret.
- * Phase 6 MVP: hardcoded dev keys. Production should use DB-backed storage.
+ * API key store backed by MySQL t_api_key table with local cache.
+ * On startup: loads all active keys into memory. On cache miss: queries DB.
  */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class ApiKeyStore {
 
-    private final Map<String, String> keyStore = new ConcurrentHashMap<>();
+    private final ApiKeyMapper apiKeyMapper;
+
+    /** Local cache: appKey -> appSecret */
+    private final Map<String, String> cache = new ConcurrentHashMap<>();
 
     @PostConstruct
     void init() {
-        // Dev keys — replace with DB query in production
-        keyStore.put("sk_test_001", "sec_001_secret_key_32_chars_here!");
-        keyStore.put("sk_test_002", "sec_002_secret_key_32_chars_here!");
-        log.info("API key store initialized with {} keys", keyStore.size());
+        refreshCache();
+        log.info("ApiKeyStore initialized: {} keys loaded from DB", cache.size());
     }
 
-    /**
-     * Look up the secret for a given app key.
-     */
     public Optional<String> getSecret(String appKey) {
-        return Optional.ofNullable(keyStore.get(appKey));
+        // 1. Local cache hit
+        String secret = cache.get(appKey);
+        if (secret != null) {
+            return Optional.of(secret);
+        }
+        // 2. Cache miss: query DB
+        ApiKeyEntity entity = apiKeyMapper.selectById(appKey);
+        if (entity != null && entity.getStatus() == 1) {
+            cache.put(appKey, entity.getAppSecret());
+            return Optional.of(entity.getAppSecret());
+        }
+        return Optional.empty();
+    }
+
+    public void refreshCache() {
+        List<ApiKeyEntity> all = apiKeyMapper.selectList(null);
+        cache.clear();
+        for (ApiKeyEntity entity : all) {
+            if (entity.getStatus() == 1) {
+                cache.put(entity.getAppKey(), entity.getAppSecret());
+            }
+        }
+        log.debug("Cache refreshed: {} keys", cache.size());
     }
 }
