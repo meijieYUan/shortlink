@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -66,7 +67,7 @@ public class SegmentIdGenerator implements IdGenerator, InitializingBean {
 
         // Slow path — synchronized segment management
         synchronized (this) {
-            // Double-check: another thread might have swapped while we waited
+            // Double-check: another thread might have swapped while we waited（其他线程可能已经更新了片段）
             seg = current;
             if (seg != null) {
                 long id = seg.tryNextId();

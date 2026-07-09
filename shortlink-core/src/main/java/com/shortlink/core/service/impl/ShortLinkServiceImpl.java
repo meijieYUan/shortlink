@@ -117,6 +117,10 @@ public class ShortLinkServiceImpl implements ShortLinkService {
                 return Optional.empty();
             }
         });
+        /*
+        Optional.map() 具有“短路”特性：
+        如果result 是 Optional.empty()（空容器），.map() 会直接跳过内部的 Lambda 表达式
+        */
         return result.map(info -> info.getExpireTime() != null
             && info.getExpireTime().isBefore(LocalDateTime.now())).orElse(false);
     }
