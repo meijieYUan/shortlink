@@ -8,7 +8,7 @@ import org.springframework.stereotype.Component;
 /**
  * Publishes access events to the Disruptor RingBuffer.
  * Non-blocking publish: tryPublishEvent returns immediately if buffer is full.
- * Called from ShortLinkController on successful redirect.
+ * Called（调用） from ShortLinkController on successful redirect.
  */
 @Component
 @RequiredArgsConstructor
@@ -20,7 +20,7 @@ public class AccessEventProducer {
      * Publish an access event. Non-blocking — silently drops if ring buffer is full.
      */
     public void publish(String shortCode, String ip, String userAgent, String referer) {
-        ringBuffer.publishEvent((event, sequence, buffer) -> {
+        ringBuffer.publishEvent((event, sequence) -> {
             event.setShortCode(shortCode);
             event.setIp(ip);
             event.setUserAgent(userAgent);
