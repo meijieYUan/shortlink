@@ -20,12 +20,15 @@ import java.util.concurrent.TimeUnit;
  * Batch policy: flush when 500 events accumulate OR 200ms elapsed.
  * Uses RocketMQ asyncSend to avoid blocking the consumer thread.
  * On send failure: events are re-added to the buffer for retry on next flush cycle.
+ * Hard cap at 2000 events to prevent unbounded memory growth.
  */
 @Slf4j
 public class AccessEventConsumer implements EventHandler<AccessEvent> {
 
     private static final int BATCH_SIZE = 500;
     private static final long FLUSH_INTERVAL_MS = 200;
+    /** Hard cap to prevent OOM when RocketMQ is unreachable for extended periods */
+    private static final int MAX_BUFFER_SIZE = 2000;
 
     private final RocketMQTemplate rocketMQTemplate;
     private final String topic;
@@ -56,6 +59,10 @@ public class AccessEventConsumer implements EventHandler<AccessEvent> {
         }
 
         synchronized (buffer) {
+            if (buffer.size() >= MAX_BUFFER_SIZE) {
+                log.warn("Buffer full ({}), dropping event: shortCode={}", MAX_BUFFER_SIZE, event.getShortCode());
+                return;
+            }
             buffer.add(event);
             if (buffer.size() >= BATCH_SIZE) {
                 flush();
@@ -73,7 +80,7 @@ public class AccessEventConsumer implements EventHandler<AccessEvent> {
 
         if (batch.isEmpty()) return;
 
-        // Async send — non-blocking, does not stall the consumer thread
+        // Async send — non-blocking, consumer thread returns immediately
         rocketMQTemplate.asyncSend(topic, MessageBuilder.withPayload(batch).build(),
             new SendCallback() {
                 @Override
@@ -83,13 +90,12 @@ public class AccessEventConsumer implements EventHandler<AccessEvent> {
 
                 @Override
                 public void onException(Throwable e) {
-                    log.error("Failed to send {} access events to RocketMQ, re-enqueuing for retry", batch.size(), e);
-                    // Re-add failed batch to the buffer for retry
+                    log.error("Failed to send {} access events to RocketMQ, re-enqueuing", batch.size(), e);
                     synchronized (buffer) {
-                        if (buffer.size() + batch.size() <= BATCH_SIZE * 2) {
-                            buffer.addAll(0, batch); // prepend to retry sooner
+                        if (buffer.size() + batch.size() <= MAX_BUFFER_SIZE) {
+                            buffer.addAll(0, batch);
                         } else {
-                            log.warn("Buffer overflow, dropping {} events from failed batch", batch.size());
+                            log.warn("Buffer overflow after retry, dropping {} events", batch.size());
                         }
                     }
                 }
