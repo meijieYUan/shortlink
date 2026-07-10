@@ -17,7 +17,6 @@ import org.springframework.web.util.ContentCachingRequestWrapper;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.Arrays;
 
 /**
  * HMAC-SHA256 authentication filter for /openapi/** paths.

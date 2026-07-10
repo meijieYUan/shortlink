@@ -24,9 +24,13 @@ public class ApiKeyStore {
     void init() {
         cache = Caffeine.newBuilder()
             .maximumSize(1000)
-            .expireAfterWrite(Duration.ofMinutes(1))
+            .expireAfterWrite(Duration.ofMinutes(5))
             .build(this::loadFromDb);
+    /*
+    如果 Wrapper 不为 null，会根据其中的条件拼接 WHERE 子句。
 
+    如果 Wrapper 为 null，不拼接 WHERE 子句。
+    */
         apiKeyMapper.selectList(null).stream()
             .filter(e -> e.getStatus() == 1)
             .forEach(e -> cache.put(e.getAppKey(), Optional.of(e)));

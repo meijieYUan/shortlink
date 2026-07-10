@@ -8,17 +8,23 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.security.SecureRandom;
 import java.time.Duration;
-import java.util.UUID;
+import java.util.HexFormat;
+import java.util.Map;
 
 /**
  * ShortLink Java SDK — auto-signs requests with HMAC-SHA256.
  *
  * Follows API_AUTH_DESIGN.md spec:
- * - X-AccessKey header (not X-AppKey)
- * - Signature covers method + path + timestamp + nonce + body-MD5 + content-type
+ * - X-AccessKey header
+ * - Nonce via SecureRandom (32 hex chars)
+ * - Signature: HMAC-SHA256(method + path + timestamp + nonce + body-MD5 + content-type, secret)
  */
 public class ShortLinkClient {
+
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+    private static final int NONCE_BYTES = 16; // 32 hex chars
 
     private final String baseUrl;
     private final String accessKey;
@@ -36,51 +42,56 @@ public class ShortLinkClient {
         this.objectMapper = new ObjectMapper();
     }
 
+    // ---- Public API ----
+
     public ShortenResult shorten(String originalUrl) throws Exception {
-        String json = String.format("{\"originalUrl\":\"%s\"}", originalUrl);
-        return doRequest("POST", "/openapi/v1/shorten", json);
+        return shorten(originalUrl, null);
     }
 
     public ShortenResult shorten(String originalUrl, String expireTime) throws Exception {
-        String json = String.format("{\"originalUrl\":\"%s\",\"expireTime\":\"%s\"}", originalUrl, expireTime);
-        return doRequest("POST", "/openapi/v1/shorten", json);
+        var bodyMap = new java.util.LinkedHashMap<String, Object>();
+        bodyMap.put("originalUrl", originalUrl);
+        if (expireTime != null) {
+            bodyMap.put("expireTime", expireTime);
+        }
+        String body = objectMapper.writeValueAsString(bodyMap);
+        return doPost("/openapi/v1/shorten", body);
     }
 
     public ShortenResult lookup(String shortCode) throws Exception {
-        String path = "/openapi/v1/shorten/" + shortCode;
-        HttpResponse<String> resp = signedRequest("GET", path, "");
+        HttpResponse<String> resp = signedRequest("GET", "/openapi/v1/shorten/" + shortCode, "");
         if (resp.statusCode() == 200) {
-            JsonNode root = objectMapper.readTree(resp.body());
-            JsonNode data = root.get("data");
+            JsonNode data = objectMapper.readTree(resp.body()).get("data");
             return new ShortenResult(0, data.get("shortCode").asText(),
                 "", data.get("originalUrl").asText());
         }
         throw new RuntimeException("Lookup failed: HTTP " + resp.statusCode());
     }
 
-    private ShortenResult doRequest(String method, String path, String body) throws Exception {
-        HttpResponse<String> resp = signedRequest(method, path, body);
+    public record ShortenResult(long id, String shortCode, String shortUrl, String originalUrl) {}
+
+    // ---- Internal ----
+
+    private ShortenResult doPost(String path, String body) throws Exception {
+        HttpResponse<String> resp = signedRequest("POST", path, body);
         if (resp.statusCode() == 200) {
-            JsonNode root = objectMapper.readTree(resp.body());
-            JsonNode data = root.get("data");
+            JsonNode data = objectMapper.readTree(resp.body()).get("data");
             return new ShortenResult(
                 data.get("id").asLong(),
                 data.get("shortCode").asText(),
                 data.get("shortUrl").asText(),
-                data.get("originalUrl").asText()
-            );
+                data.get("originalUrl").asText());
         }
         throw new RuntimeException("Request failed: HTTP " + resp.statusCode() + " " + resp.body());
     }
 
     private HttpResponse<String> signedRequest(String method, String path, String body) throws Exception {
         String timestamp = String.valueOf(System.currentTimeMillis());
-        String nonce = UUID.randomUUID().toString().replace("-", "");
+        String nonce = generateNonce();
         String contentType = body.isEmpty() ? "" : "application/json";
-
         String signature = HmacUtil.hmacSha256Hex(method, path, timestamp, nonce, body, contentType, accessSecret);
 
-        HttpRequest.Builder builder = HttpRequest.newBuilder()
+        var builder = HttpRequest.newBuilder()
             .uri(URI.create(baseUrl + path))
             .timeout(Duration.ofSeconds(10))
             .header("X-AccessKey", accessKey)
@@ -98,7 +109,15 @@ public class ShortLinkClient {
         return httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofString());
     }
 
-    public record ShortenResult(long id, String shortCode, String shortUrl, String originalUrl) {}
+    // ---- Static helpers ----
+
+    static String generateNonce() {
+        byte[] bytes = new byte[NONCE_BYTES];
+        SECURE_RANDOM.nextBytes(bytes);
+        return HexFormat.of().formatHex(bytes);
+    }
+
+    // ---- Builder ----
 
     public static Builder builder() { return new Builder(); }
 

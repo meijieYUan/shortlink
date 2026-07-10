@@ -29,6 +29,9 @@ public final class HmacUtil {
      * @param secret      AccessSecret
      * @return lowercase hex signature string
      */
+    /*
+    nonce（Number used once，一次性数字）是一个安全设计模式和编程概念。它的核心目的是防止重放攻击
+     */
     public static String hmacSha256Hex(String method, String path, String timestamp,
                                         String nonce, String body, String contentType,
                                         String secret) {
