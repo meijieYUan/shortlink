@@ -77,6 +77,17 @@ public class ApiKeyStore {
         return false;
     }
 
+        /**
+     * Get the quota (requests per minute) for the given accessKey.
+     * Falls back to 600 QPM (10 QPS) if not configured.
+     */
+    public int getQuotaPerMinute(String accessKey) {
+        return cache.get(accessKey)
+            .filter(e -> e.getStatus() == 1)
+            .map(ApiKeyEntity::getQuotaPerMinute)
+            .orElse(600);
+    }
+
     public void invalidate(String accessKey) {
         cache.invalidate(accessKey);
     }

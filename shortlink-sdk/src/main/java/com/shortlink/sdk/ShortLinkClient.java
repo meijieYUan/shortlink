@@ -98,7 +98,12 @@ public class ShortLinkClient {
             .header("X-Timestamp", timestamp)
             .header("X-Nonce", nonce)
             .header("X-Signature", signature);
+        /*
+        在 HttpClient 的设计中，每个请求都必须有一个 BodyPublisher（即使是空的）。
+        如果你调用 builder.GET() 或 builder.DELETE() 等快捷方法，它们内部会自动设置一个 noBody() 的发布器。
+        但当你使用通用的 method() 方法时，必须显式提供一个 BodyPublisher 实例。
 
+         */
         if (!body.isEmpty()) {
             builder.header("Content-Type", contentType)
                    .method(method, HttpRequest.BodyPublishers.ofString(body));
