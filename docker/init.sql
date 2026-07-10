@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS t_id_segment (
 
 INSERT INTO t_id_segment (biz_tag, max_id, step) VALUES ('short_link', 0, 2000)
 ON DUPLICATE KEY UPDATE biz_tag = biz_tag;
+
 CREATE TABLE IF NOT EXISTS t_api_key (
     app_key         VARCHAR(64) PRIMARY KEY COMMENT 'AccessKey',
     app_secret      VARCHAR(128) NOT NULL COMMENT 'AccessSecret',
@@ -36,11 +37,6 @@ CREATE TABLE IF NOT EXISTS t_api_key (
     create_time     DATETIME DEFAULT CURRENT_TIMESTAMP,
     update_time     DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='API密钥表';
-
-INSERT INTO t_api_key (app_key, app_secret, owner) VALUES
-('sk_test_001', 'sec_001_secret_key_32_chars_here!', 'dev'),
-('sk_test_002', 'sec_002_secret_key_32_chars_here!', 'dev')
-ON DUPLICATE KEY UPDATE app_key = app_key;
 
 INSERT INTO t_api_key (app_key, app_secret, owner) VALUES
 ('sk_test_001', 'sec_001_secret_key_32_chars_here!', 'dev'),
