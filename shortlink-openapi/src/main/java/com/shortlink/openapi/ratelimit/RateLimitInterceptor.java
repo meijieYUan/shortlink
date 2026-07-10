@@ -25,7 +25,10 @@ public class RateLimitInterceptor implements HandlerInterceptor {
 
         String accessKey = (String) request.getAttribute("accessKey");
         if (accessKey == null) {
-            return true;
+            // Auth filter did not run or failed — reject, don't silently pass through
+            log.error("accessKey attribute missing on /openapi/** request — auth filter bypassed? uri={}",
+                request.getRequestURI());
+            throw new BizException(ResultCode.UNAUTHORIZED, "Authentication required");
         }
 
         if (!rateLimiterService.tryAcquire(accessKey)) {
