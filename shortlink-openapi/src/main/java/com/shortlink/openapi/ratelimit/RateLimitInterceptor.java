@@ -9,11 +9,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
-/**
- * Rate limit interceptor for /openapi/** endpoints.
- * Acquires a permit per AppKey before allowing the request through.
- * Returns 429 Too Many Requests with X-RateLimit-* headers when exceeded.
- */
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -28,14 +23,13 @@ public class RateLimitInterceptor implements HandlerInterceptor {
             return true;
         }
 
-        String appKey = (String) request.getAttribute("appKey");
-        if (appKey == null) {
-            // Auth interceptor should have set this; if not, let auth interceptor reject
+        String accessKey = (String) request.getAttribute("accessKey");
+        if (accessKey == null) {
             return true;
         }
 
-        if (!rateLimiterService.tryAcquire(appKey)) {
-            log.warn("Rate limit exceeded: appKey={}, uri={}", appKey, request.getRequestURI());
+        if (!rateLimiterService.tryAcquire(accessKey)) {
+            log.warn("Rate limit exceeded: accessKey={}, uri={}", accessKey, request.getRequestURI());
             response.setHeader("X-RateLimit-Retry-After", "1");
             throw new BizException(ResultCode.TOO_MANY_REQUESTS,
                 "Rate limit exceeded. Try again in 1 second.");

@@ -7,17 +7,10 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.net.InetAddress;
 import java.time.Duration;
 import java.util.Optional;
 
-/**
- * API key store backed by MySQL t_api_key with Caffeine local cache.
- *
- * Cache policy:
- * - TTL 5 minutes (keys rarely change; stale keys auto-removed)
- * - Max 1000 entries
- * - LoadingCache: on miss, queries DB; on expiry, auto-refreshes
- */
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -25,41 +18,67 @@ public class ApiKeyStore {
 
     private final ApiKeyMapper apiKeyMapper;
 
-    private LoadingCache<String, Optional<String>> cache;
+    private LoadingCache<String, Optional<ApiKeyEntity>> cache;
 
     @PostConstruct
     void init() {
         cache = Caffeine.newBuilder()
             .maximumSize(1000)
-            .expireAfterWrite(Duration.ofMinutes(5))
+            .expireAfterWrite(Duration.ofMinutes(1))
             .build(this::loadFromDb);
 
-        // Warm up: load all active keys from DB
         apiKeyMapper.selectList(null).stream()
             .filter(e -> e.getStatus() == 1)
-            .forEach(e -> cache.put(e.getAppKey(), Optional.of(e.getAppSecret())));
+            .forEach(e -> cache.put(e.getAppKey(), Optional.of(e)));
 
-        log.info("ApiKeyStore initialized: Caffeine cache (5min TTL, max 1000)");
+        log.info("ApiKeyStore initialized: Caffeine cache (1min TTL, max 1000)");
     }
 
-    public Optional<String> getSecret(String appKey) {
-        return cache.get(appKey);
+    public Optional<String> getSecret(String accessKey) {
+        return cache.get(accessKey)
+            .filter(e -> e.getStatus() == 1)
+            .map(ApiKeyEntity::getAppSecret);
     }
 
     /**
-     * Invalidate a specific key (e.g., after key rotation / disable).
+     * Check if client IP matches the configured whitelist.
+     * Empty/null whitelist = allow all.
      */
-    public void invalidate(String appKey) {
-        cache.invalidate(appKey);
+    public boolean matchIpWhitelist(String accessKey, String clientIp) {
+        Optional<ApiKeyEntity> entity = cache.get(accessKey);
+        if (entity.isEmpty() || entity.get().getStatus() != 1) {
+            return true; // let signature check fail, or no restriction if key has no whitelist
+        }
+        String whitelist = entity.get().getIpWhitelist();
+        if (whitelist == null || whitelist.isBlank()) {
+            return true; // no restriction
+        }
+
+        try {
+            InetAddress clientAddr = InetAddress.getByName(clientIp);
+            for (String cidr : whitelist.split(",")) {
+                cidr = cidr.trim();
+                if (cidr.isEmpty()) continue;
+                // Simple check: exact IP match or /32
+                String ip = cidr.contains("/") ? cidr.substring(0, cidr.indexOf('/')) : cidr;
+                if (clientAddr.equals(InetAddress.getByName(ip))) {
+                    return true;
+                }
+                // Full CIDR check can be added with a library like commons-net
+            }
+        } catch (Exception e) {
+            log.warn("IP whitelist check failed: accessKey={}, ip={}", accessKey, clientIp, e);
+            return false;
+        }
+        return false;
     }
 
-    private Optional<String> loadFromDb(String appKey) {
-        ApiKeyEntity entity = apiKeyMapper.selectById(appKey);
-        if (entity != null && entity.getStatus() == 1) {
-            log.debug("DB hit for appKey: {}", appKey);
-            return Optional.of(entity.getAppSecret());
-        }
-        log.debug("DB miss for appKey: {}", appKey);
-        return Optional.empty();
+    public void invalidate(String accessKey) {
+        cache.invalidate(accessKey);
+    }
+
+    private Optional<ApiKeyEntity> loadFromDb(String accessKey) {
+        ApiKeyEntity entity = apiKeyMapper.selectById(accessKey);
+        return Optional.ofNullable(entity);
     }
 }

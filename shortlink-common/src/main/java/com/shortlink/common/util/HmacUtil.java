@@ -6,19 +6,41 @@ import java.nio.charset.StandardCharsets;
 import java.util.HexFormat;
 
 /**
- * HMAC-SHA256 utility for API authentication.
- * Used by both server-side HmacAuthInterceptor and client-side SDK.
+ * HMAC-SHA256 utility for OpenAPI authentication.
+ *
+ * Signature string format (aligned with API_AUTH_DESIGN.md):
+ *   method + "\n" + path + "\n" + timestamp + "\n" + nonce + "\n" + bodyMd5 + "\n" + contentType
+ *
+ * Where bodyMd5 = Hex(MD5(body)) for POST/PUT, empty string for GET/DELETE.
  */
 public final class HmacUtil {
 
     private HmacUtil() {}
 
     /**
-     * Compute HMAC-SHA256 signature as lowercase hex string.
-     * @param payload the string to sign (e.g., "POST\n/path\ntimestamp\nnonce")
-     * @param secret the signing key
+     * Compute HMAC-SHA256 signature.
+     *
+     * @param method      HTTP method (GET/POST/PUT/DELETE)
+     * @param path        request path (e.g., "/openapi/v1/shorten")
+     * @param timestamp   X-Timestamp header value (epoch millis)
+     * @param nonce       X-Nonce header value
+     * @param body        request body string (null or empty for GET)
+     * @param contentType Content-Type header value (e.g., "application/json")
+     * @param secret      AccessSecret
+     * @return lowercase hex signature string
      */
-    public static String hmacSha256Hex(String payload, String secret) {
+    public static String hmacSha256Hex(String method, String path, String timestamp,
+                                        String nonce, String body, String contentType,
+                                        String secret) {
+        String bodyMd5 = (body != null && !body.isEmpty())
+            ? HashUtil.md5Hex(body) : "";
+        String payload = method + "\n"
+                       + path + "\n"
+                       + timestamp + "\n"
+                       + nonce + "\n"
+                       + bodyMd5 + "\n"
+                       + (contentType != null ? contentType : "");
+
         try {
             Mac mac = Mac.getInstance("HmacSHA256");
             SecretKeySpec keySpec = new SecretKeySpec(

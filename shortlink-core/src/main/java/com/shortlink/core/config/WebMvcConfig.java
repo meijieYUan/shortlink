@@ -1,6 +1,5 @@
 package com.shortlink.core.config;
 
-import com.shortlink.openapi.auth.HmacAuthInterceptor;
 import com.shortlink.openapi.ratelimit.RateLimitInterceptor;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -12,29 +11,22 @@ import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 import java.util.Arrays;
-import java.util.List;
 
 @Slf4j
 @Configuration
 @RequiredArgsConstructor
 public class WebMvcConfig implements WebMvcConfigurer {
 
-    private final HmacAuthInterceptor hmacAuthInterceptor;
     private final RateLimitInterceptor rateLimitInterceptor;
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
-        // Request log interceptor — applies to all paths except static resources
+        // Request log interceptor — all paths except static resources
         registry.addInterceptor(new RequestLogInterceptor())
             .addPathPatterns("/**")
             .excludePathPatterns(Arrays.asList("/actuator/**", "/favicon.ico"));
 
-        // HMAC auth — OpenAPI only
-        registry.addInterceptor(hmacAuthInterceptor)
-            .addPathPatterns("/openapi/**")
-            .order(1);
-
-        // Rate limit — OpenAPI only
+        // Rate limit — OpenAPI only (HMAC auth is handled by HmacAuthFilter)
         registry.addInterceptor(rateLimitInterceptor)
             .addPathPatterns("/openapi/**")
             .order(2);

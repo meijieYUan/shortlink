@@ -27,13 +27,20 @@ CREATE TABLE IF NOT EXISTS t_id_segment (
 INSERT INTO t_id_segment (biz_tag, max_id, step) VALUES ('short_link', 0, 2000)
 ON DUPLICATE KEY UPDATE biz_tag = biz_tag;
 CREATE TABLE IF NOT EXISTS t_api_key (
-    app_key    VARCHAR(64) PRIMARY KEY COMMENT 'AppKey',
-    app_secret VARCHAR(128) NOT NULL COMMENT 'AppSecret',
-    owner      VARCHAR(64) DEFAULT '' COMMENT '属主',
-    status     TINYINT DEFAULT 1 COMMENT '1:有效 0:禁用',
-    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
-    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    app_key         VARCHAR(64) PRIMARY KEY COMMENT 'AccessKey',
+    app_secret      VARCHAR(128) NOT NULL COMMENT 'AccessSecret',
+    owner           VARCHAR(64) DEFAULT '' COMMENT '属主',
+    status          TINYINT DEFAULT 1 COMMENT '1:有效 0:禁用',
+    ip_whitelist    TEXT COMMENT 'IP白名单,逗号分隔,空=不限制',
+    quota_per_minute INT DEFAULT 600 COMMENT '每分钟调用上限',
+    create_time     DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_time     DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='API密钥表';
+
+INSERT INTO t_api_key (app_key, app_secret, owner) VALUES
+('sk_test_001', 'sec_001_secret_key_32_chars_here!', 'dev'),
+('sk_test_002', 'sec_002_secret_key_32_chars_here!', 'dev')
+ON DUPLICATE KEY UPDATE app_key = app_key;
 
 INSERT INTO t_api_key (app_key, app_secret, owner) VALUES
 ('sk_test_001', 'sec_001_secret_key_32_chars_here!', 'dev'),
