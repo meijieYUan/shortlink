@@ -1,4 +1,4 @@
-package com.shortlink.core.model.entity;
+package com.shortlink.domain.model.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
@@ -17,18 +17,14 @@ import java.time.LocalDateTime;
 @TableName("t_short_link")
 public class ShortLink {
 
-    /** ID provided by IdGenerator (segment mode), not DB auto-increment */
     @TableId(type = IdType.INPUT)
     private Long id;
-
     private String shortCode;
     private String originalUrl;
     private String urlHash;
+    private String appKey;
     private LocalDateTime expireTime;
-
-    /** 1=active, 0=disabled */
     private Integer status;
-
     private String creator;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;

@@ -3,8 +3,8 @@ package com.shortlink.admin.controller;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.shortlink.common.result.Result;
 import com.shortlink.common.result.ResultCode;
-import com.shortlink.core.model.entity.ShortLink;
-import com.shortlink.core.service.impl.ShortLinkServiceImpl;
+import com.shortlink.domain.model.entity.ShortLink;
+import com.shortlink.domain.service.OpenApiLinkService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
@@ -18,20 +18,17 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class LinkAdminController {
 
-    private final ShortLinkServiceImpl shortLinkService;
+    private final OpenApiLinkService linkService;
 
     @GetMapping
-    public Result<Page<ShortLink>> list(
-            @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "20") int size,
-            @RequestParam(required = false) Integer status,
-            @RequestParam(required = false) String keyword) {
-        return Result.success(shortLinkService.listLinks(page, size, status, keyword));
+    public Result<Page<ShortLink>> list(@RequestParam(defaultValue = "1") int page, @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) Integer status, @RequestParam(required = false) String keyword) {
+        return Result.success(linkService.listLinks(page, size, status, keyword));
     }
 
     @GetMapping("/{shortCode}")
     public Result<ShortLink> getOne(@PathVariable String shortCode) {
-        ShortLink link = shortLinkService.getLink(shortCode);
+        ShortLink link = linkService.getLink(shortCode);
         if (link == null) return Result.fail(ResultCode.NOT_FOUND);
         return Result.success(link);
     }
@@ -41,18 +38,12 @@ public class LinkAdminController {
         Integer s = body.get("status") != null ? ((Number) body.get("status")).intValue() : null;
         String code = (String) body.get("customCode");
         LocalDateTime exp = body.get("expireTime") != null ? LocalDateTime.parse((String) body.get("expireTime")) : null;
-        return Result.success(shortLinkService.updateLink(shortCode, s, code, exp));
+        return Result.success(linkService.updateLink(shortCode, s, code, exp));
     }
 
     @DeleteMapping("/{shortCode}")
-    public Result<Void> delete(@PathVariable String shortCode) {
-        shortLinkService.softDelete(shortCode);
-        return Result.success();
-    }
+    public Result<Void> delete(@PathVariable String shortCode) { linkService.softDelete(shortCode); return Result.success(); }
 
     @PostMapping("/{shortCode}/restore")
-    public Result<Void> restore(@PathVariable String shortCode) {
-        shortLinkService.restore(shortCode);
-        return Result.success();
-    }
+    public Result<Void> restore(@PathVariable String shortCode) { linkService.restore(shortCode); return Result.success(); }
 }

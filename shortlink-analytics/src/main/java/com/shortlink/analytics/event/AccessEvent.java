@@ -7,10 +7,6 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
-/**
- * Access event pushed to Disruptor RingBuffer on every successful redirect.
- * Fields align with the RocketMQ message payload.
- */
 @Data
 @Builder
 @NoArgsConstructor

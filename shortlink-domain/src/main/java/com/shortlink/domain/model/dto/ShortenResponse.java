@@ -1,4 +1,4 @@
-package com.shortlink.core.model.dto;
+package com.shortlink.domain.model.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -12,7 +12,6 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 public class ShortenResponse {
-
     private Long id;
     private String shortCode;
     private String shortUrl;

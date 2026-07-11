@@ -7,15 +7,28 @@ CREATE TABLE IF NOT EXISTS t_short_link (
     short_code    VARCHAR(8)    NOT NULL UNIQUE COMMENT '短码',
     original_url  TEXT          NOT NULL COMMENT '原始链接',
     url_hash      VARCHAR(32)   NOT NULL COMMENT 'MD5哈希(幂等查重用)',
+    app_key       VARCHAR(64)   NOT NULL DEFAULT '' COMMENT '所属租户AccessKey',
     expire_time   DATETIME      DEFAULT NULL COMMENT '过期时间',
-    status        TINYINT       DEFAULT 1 COMMENT '1:有效 0:失效',
+    status        TINYINT       DEFAULT 1 COMMENT '1:有效 0:失效 2:回收站',
     creator       VARCHAR(64)   DEFAULT '' COMMENT '创建者',
     create_time   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_time   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_short_code (short_code),
     INDEX idx_url_hash (url_hash),
+    INDEX idx_app_key (app_key),
     INDEX idx_status_expire (status, expire_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='短链接映射表';
+
+CREATE TABLE IF NOT EXISTS t_access_log (
+    id            BIGINT AUTO_INCREMENT PRIMARY KEY,
+    short_code    VARCHAR(8)  NOT NULL COMMENT '短码',
+    ip            VARCHAR(45) NOT NULL DEFAULT '' COMMENT '访问者IP',
+    user_agent    VARCHAR(512) DEFAULT '' COMMENT 'User-Agent',
+    referer       VARCHAR(2048) DEFAULT '' COMMENT 'Referer',
+    access_time   DATETIME NOT NULL COMMENT '访问时间',
+    INDEX idx_short_code_time (short_code, access_time),
+    INDEX idx_access_time (access_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='短链访问日志表';
 
 CREATE TABLE IF NOT EXISTS t_id_segment (
     biz_tag     VARCHAR(64) PRIMARY KEY COMMENT '业务标识',

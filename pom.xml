@@ -20,6 +20,7 @@
 
     <modules>
         <module>shortlink-common</module>
+        <module>shortlink-domain</module>
         <module>shortlink-core</module>
         <module>shortlink-cache</module>
         <module>shortlink-analytics</module>
@@ -70,6 +71,11 @@
 
     <dependencyManagement>
         <dependencies>
+            <dependency>
+                <groupId>com.shortlink</groupId>
+                <artifactId>shortlink-domain</artifactId>
+                <version>${project.version}</version>
+            </dependency>
             <dependency>
                 <groupId>com.shortlink</groupId>
                 <artifactId>shortlink-common</artifactId>

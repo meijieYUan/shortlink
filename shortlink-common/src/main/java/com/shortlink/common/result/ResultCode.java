@@ -22,6 +22,8 @@ public enum ResultCode {
     RATE_LIMIT_EXCEEDED(1005, "超出调用频率限制"),
     QUOTA_EXCEEDED(1006, "超出配额限制"),
     GENERATE_FAILED(1007, "短链接生成失败"),
+    SHORT_CODE_BLACKLISTED(1008, "该短码为系统保留关键字，不可使用"),
+    SHORT_CODE_TOO_SHORT(1009, "自定义短码长度至少为4位"),
     ;
 
     private final int code;

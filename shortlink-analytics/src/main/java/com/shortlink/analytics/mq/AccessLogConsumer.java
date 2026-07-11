@@ -1,18 +1,16 @@
 package com.shortlink.analytics.mq;
 
 import com.shortlink.analytics.event.AccessEvent;
+import com.shortlink.analytics.model.AccessLog;
+import com.shortlink.analytics.service.AccessLogService;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.rocketmq.spring.annotation.RocketMQMessageListener;
 import org.apache.rocketmq.spring.core.RocketMQListener;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
-/**
- * RocketMQ consumer for access log events.
- * Receives batched AccessEvents and logs them for Phase 5 MVP.
- * Phase 5b will persist to Elasticsearch + MySQL aggregation.
- */
 @Slf4j
 @Component
 @RocketMQMessageListener(
@@ -22,21 +20,28 @@ import java.util.List;
 )
 public class AccessLogConsumer implements RocketMQListener<List<AccessEvent>> {
 
+    private final AccessLogService accessLogService;
+
+    public AccessLogConsumer(AccessLogService accessLogService) {
+        this.accessLogService = accessLogService;
+    }
+
     @Override
     public void onMessage(List<AccessEvent> batch) {
-        if (batch == null || batch.isEmpty()) {
-            return;
-        }
+        if (batch == null || batch.isEmpty()) return;
         try {
-            log.info("Received {} access events. Phase 5b will persist to ES/MySQL.", batch.size());
-            // Log first few events for debugging
-            batch.stream().limit(3).forEach(e ->
-                log.debug("Access: shortCode={}, ip={}, referer={}, ts={}",
-                    e.getShortCode(), e.getIp(), e.getReferer(), e.getTimestamp())
-            );
+            List<AccessLog> logs = batch.stream().map(e -> AccessLog.builder()
+                .shortCode(e.getShortCode())
+                .ip(e.getIp() != null ? e.getIp() : "")
+                .userAgent(e.getUserAgent() != null ? e.getUserAgent() : "")
+                .referer(e.getReferer() != null ? e.getReferer() : "")
+                .accessTime(e.getTimestamp())
+                .build()).collect(Collectors.toList());
+            accessLogService.batchInsert(logs);
+            log.debug("Persisted {} access events", logs.size());
         } catch (Exception e) {
-            log.error("Error processing access events batch", e);
-            throw e; // trigger RocketMQ retry
+            log.error("Error persisting access events batch", e);
+            throw e;
         }
     }
 }
