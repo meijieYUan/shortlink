@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ShortLink 管理控制台</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f6fa;color:#333}
+.header{background:#2c3e50;color:#fff;padding:16px 24px;display:flex;justify-content:space-between;align-items:center}
+.header h1{font-size:20px;font-weight:600}
+.tabs{display:flex;gap:4px}
+.tab-btn{padding:8px 16px;border:none;background:transparent;color:#95a5a6;cursor:pointer;font-size:14px;border-radius:4px}
+.tab-btn.active{background:#34495e;color:#fff}
+.container{max-width:1200px;margin:0 auto;padding:24px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px}
+.stat-card{background:#fff;padding:20px;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.08)}
+.stat-card .label{font-size:13px;color:#888;margin-bottom:6px}
+.stat-card .value{font-size:28px;font-weight:700;color:#2c3e50}
+.toolbar{display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+.toolbar input,.toolbar select{padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px}
+.toolbar input{flex:1;min-width:200px}
+.toolbar button{padding:8px 16px;border:none;border-radius:6px;background:#3498db;color:#fff;cursor:pointer;font-size:13px}
+.toolbar button:hover{background:#2980b9}
+.toolbar button.danger{background:#e74c3c}
+.toolbar button.danger:hover{background:#c0392b}
+.toolbar button.success{background:#27ae60}
+.toolbar button.success:hover{background:#219a52}
+table{width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08)}
+th{background:#f8f9fa;padding:12px 16px;text-align:left;font-size:13px;color:#666;font-weight:600;border-bottom:2px solid #eee}
+td{padding:12px 16px;font-size:13px;border-bottom:1px solid #f0f0f0}
+td.code{font-family:monospace;font-size:13px;color:#2980b9}
+td.url{max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.badge{padding:3px 8px;border-radius:4px;font-size:11px;font-weight:600}
+.badge.active{background:#d5f5e3;color:#27ae60}
+.badge.expired{background:#fadbd8;color:#e74c3c}
+.badge.recycled{background:#fdebd0;color:#e67e22}
+.pagination{display:flex;gap:8px;margin-top:16px;justify-content:center}
+.pagination button{padding:6px 12px;border:1px solid #ddd;background:#fff;border-radius:4px;cursor:pointer;font-size:13px}
+.pagination button.active{background:#3498db;color:#fff;border-color:#3498db}
+.loading{text-align:center;padding:40px;color:#999}
+.empty{text-align:center;padding:40px;color:#999;font-size:14px}
+.panel{display:none}
+.panel.active{display:block}
+#analytics-panel canvas{max-width:100%}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>ShortLink 管理控制台</h1>
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('links')">短链管理</button>
+    <button class="tab-btn" onclick="switchTab('keys')">API密钥</button>
+    <button class="tab-btn" onclick="switchTab('analytics')">数据分析</button>
+  </div>
+</div>
+
+<div class="container">
+  <div class="panel active" id="links-panel">
+    <div class="stats" id="link-stats"></div>
+    <div class="toolbar">
+      <input type="text" id="keyword" placeholder="搜索短码或URL..." onkeyup="if(event.key==='Enter')loadLinks()">
+      <select id="status-filter" onchange="loadLinks()">
+        <option value="">全部状态</option><option value="1">有效</option><option value="0">过期</option><option value="2">回收站</option>
+      </select>
+      <button onclick="loadLinks()">查询</button>
+    </div>
+    <div id="links-table"></div>
+    <div class="pagination" id="links-pager"></div>
+  </div>
+
+  <div class="panel" id="keys-panel">
+    <div class="toolbar">
+      <button onclick="showCreateKey()">+ 创建密钥</button>
+    </div>
+    <div id="keys-table"></div>
+  </div>
+
+  <div class="panel" id="analytics-panel">
+    <div class="stats" id="analytics-stats"></div>
+    <p style="color:#999;font-size:13px;text-align:center;margin:20px 0">
+      详细访问分析（PV/UV/地域分布）将在接入 Elasticsearch 后提供。
+      当前展示短链汇总统计数据。
+    </p>
+  </div>
+</div>
+
+<script>
+const BASE = '/openapi/v1/admin';
+let currentPage = 1, currentTab = 'links';
+
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.tab-btn').forEach((b,i)=>b.classList.toggle('active',i===['links','keys','analytics'].indexOf(tab)));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById(tab+'-panel').classList.add('active');
+  if(tab==='links') loadLinks();
+  else if(tab==='keys') loadKeys();
+  else loadAnalytics();
+}
+
+async function loadLinks(page=1) {
+  currentPage = page;
+  const kw = document.getElementById('keyword').value;
+  const st = document.getElementById('status-filter').value;
+  const url = BASE+'/links?page='+page+'&size=15'+(st?'&status='+st:'')+(kw?'&keyword='+kw:'');
+  try {
+    const r = await fetch(url,{headers:{'X-AccessKey':'sk_test_001','X-Timestamp':Date.now(),'X-Nonce':randomHex(16),'X-Signature':dummySig()}});
+    const d = await r.json();
+    if(d.code===200) renderLinks(d.data);
+  }catch(e){document.getElementById('links-table').innerHTML='<div class=loading>加载失败</div>'}
+}
+
+function renderLinks(page) {
+  const rows = page.records.map(l=>{
+    const badge = l.status===1?'active':l.status===2?'recycled':'expired';
+    const badgeText = {1:'有效',0:'过期',2:'回收站'}[l.status]||l.status;
+    return `<tr>
+      <td class="code">${l.shortCode}</td>
+      <td class="url" title="${l.originalUrl||''}">${l.originalUrl||''}</td>
+      <td><span class="badge ${badge}">${badgeText}</span></td>
+      <td>${l.createTime||''}</td>
+      <td>
+        ${l.status===2?'<button class="success" onclick="restoreLink(\''+l.shortCode+'\')">恢复</button>':''}
+        ${l.status===1?'<button class="danger" onclick="delLink(\''+l.shortCode+'\')">删除</button>':''}
+      </td></tr>`;
+  }).join('');
+  document.getElementById('links-table').innerHTML = '<table><thead><tr><th>短码</th><th>原始URL</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead><tbody>'+(rows||'<tr><td colspan=5 class=empty>暂无数据</td></tr>')+'</tbody></table>';
+  renderPager(page);
+  loadLinkStats();
+}
+
+function renderPager(page) {
+  let html = '';
+  for(let i=1;i<=page.pages;i++) html+=`<button class="${i===page.current?'active':''}" onclick="loadLinks(${i})">${i}</button>`;
+  document.getElementById('links-pager').innerHTML = html;
+}
+
+async function delLink(code){if(confirm('确定删除 '+code+'? (进入回收站)')){await fetch(BASE+'/links/'+code,{method:'DELETE',headers:authHeaders()});loadLinks()}}
+async function restoreLink(code){await fetch(BASE+'/links/'+code+'/restore',{method:'POST',headers:authHeaders()});loadLinks()}
+async function loadLinkStats(){
+  try{
+    const r = await fetch(BASE+'/links/stats',{headers:authHeaders()});
+    const d = await r.json();
+    if(d.code===200) document.getElementById('link-stats').innerHTML =
+      '<div class=stat-card><div class=label>总短链</div><div class=value>'+d.data.total+'</div></div>'+
+      '<div class=stat-card><div class=label>活跃</div><div class=value style=color:#27ae60>'+d.data.active+'</div></div>'+
+      '<div class=stat-card><div class=label>回收站</div><div class=value style=color:#e67e22>'+d.data.recycled+'</div></div>';
+  }catch(e){}
+}
+async function loadKeys(){
+  try{
+    const r = await fetch(BASE+'/keys',{headers:authHeaders()});
+    const d = await r.json();
+    if(d.code===200) renderKeys(d.data);
+  }catch(e){}
+}
+function renderKeys(keys){
+  const rows = keys.map(k=>`<tr>
+    <td class=code>${k.appKey}</td>
+    <td>${k.owner||''}</td>
+    <td><span class="badge ${k.status===1?'active':'expired'}">${k.status===1?'有效':'禁用'}</span></td>
+    <td>${k.quotaPerMinute||600} QPM</td>
+    <td>${k.createTime||''}</td></tr>`).join('');
+  document.getElementById('keys-table').innerHTML = '<table><thead><tr><th>AccessKey</th><th>属主</th><th>状态</th><th>配额</th><th>创建时间</th></tr></thead><tbody>'+(rows||'<tr><td colspan=5 class=empty>暂无数据</td></tr>')+'</tbody></table>';
+}
+async function loadAnalytics(){
+  try{
+    const r = await fetch(BASE+'/links/stats',{headers:authHeaders()});
+    const d = await r.json();
+    if(d.code===200) document.getElementById('analytics-stats').innerHTML =
+      '<div class=stat-card><div class=label>总短链</div><div class=value>'+d.data.total+'</div></div>'+
+      '<div class=stat-card><div class=label>今日创建</div><div class=value>--</div></div>'+
+      '<div class=stat-card><div class=label>总访问(PV)</div><div class=value>--</div></div>';
+  }catch(e){}
+}
+function showCreateKey(){alert('创建密钥功能请调用 POST '+BASE+'/keys')}
+function randomHex(n){return Array.from({length:n},()=>Math.floor(Math.random()*16).toString(16)).join('')}
+function dummySig(){return 'a'.repeat(64)}
+function authHeaders(){return{'Content-Type':'application/json','X-AccessKey':'sk_test_001','X-Timestamp':String(Date.now()),'X-Nonce':randomHex(32),'X-Signature':dummySig()}}
+
+loadLinks();
+</script>
+</body>
+</html>

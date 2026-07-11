@@ -1,7 +1,8 @@
-package com.shortlink.core.controller;
+package com.shortlink.admin.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.shortlink.common.result.Result;
+import com.shortlink.common.result.ResultCode;
 import com.shortlink.core.model.entity.ShortLink;
 import com.shortlink.core.service.impl.ShortLinkServiceImpl;
 import lombok.RequiredArgsConstructor;
@@ -31,23 +32,16 @@ public class LinkAdminController {
     @GetMapping("/{shortCode}")
     public Result<ShortLink> getOne(@PathVariable String shortCode) {
         ShortLink link = shortLinkService.getLink(shortCode);
-        if (link == null) {
-            return Result.fail(com.shortlink.common.result.ResultCode.NOT_FOUND);
-        }
+        if (link == null) return Result.fail(ResultCode.NOT_FOUND);
         return Result.success(link);
     }
 
     @PutMapping("/{shortCode}")
-    public Result<ShortLink> update(
-            @PathVariable String shortCode,
-            @RequestBody Map<String, Object> body) {
-        Integer status = body.get("status") != null ? ((Number) body.get("status")).intValue() : null;
-        String customCode = (String) body.get("customCode");
-        LocalDateTime expireTime = null;
-        if (body.get("expireTime") != null) {
-            expireTime = LocalDateTime.parse((String) body.get("expireTime"));
-        }
-        return Result.success(shortLinkService.updateLink(shortCode, status, customCode, expireTime));
+    public Result<ShortLink> update(@PathVariable String shortCode, @RequestBody Map<String, Object> body) {
+        Integer s = body.get("status") != null ? ((Number) body.get("status")).intValue() : null;
+        String code = (String) body.get("customCode");
+        LocalDateTime exp = body.get("expireTime") != null ? LocalDateTime.parse((String) body.get("expireTime")) : null;
+        return Result.success(shortLinkService.updateLink(shortCode, s, code, exp));
     }
 
     @DeleteMapping("/{shortCode}")
@@ -60,10 +54,5 @@ public class LinkAdminController {
     public Result<Void> restore(@PathVariable String shortCode) {
         shortLinkService.restore(shortCode);
         return Result.success();
-    }
-
-    @GetMapping("/stats")
-    public Result<Map<String, Object>> stats() {
-        return Result.success(shortLinkService.getStats());
     }
 }

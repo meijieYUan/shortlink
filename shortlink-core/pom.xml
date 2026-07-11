@@ -29,10 +29,6 @@
         </dependency>
         <dependency>
             <groupId>com.shortlink</groupId>
-            <artifactId>shortlink-admin</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.shortlink</groupId>
             <artifactId>shortlink-openapi</artifactId>
         </dependency>
 
